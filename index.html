@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCSS Student Results</title>
+<link rel="icon" href="ccss-crest.png">
+<style>
+  :root{--teal:#3AAA94;--navy:#15303F;--bg:#f2f7f6;--card:#fff;--text:#15303F;--muted:#5d727c;--line:#d8e5e2;--err:#b3261e}
+  @media (prefers-color-scheme:dark){:root{--bg:#0e1c24;--card:#15303F;--text:#eaf3f1;--muted:#a8bec5;--line:#2a4a58}}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{background:#fff;border-bottom:4px solid var(--teal);text-align:center;padding:14px 12px}
+  header img{max-width:min(420px,80vw);height:auto}
+  main{flex:1;width:100%;max-width:640px;margin:0 auto;padding:22px 16px 30px}
+  h1{font-size:1.45rem;margin:6px 0 4px}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+  label{display:block;font-weight:600;margin:14px 0 6px}
+  input,select{width:100%;padding:13px 14px;font-size:1rem;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--text)}
+  input:focus,select:focus{outline:3px solid rgba(58,170,148,.35);border-color:var(--teal)}
+  .hint{font-size:.85rem;color:var(--muted);margin-top:4px}
+  button,.btn{display:inline-block;border:0;border-radius:10px;padding:14px 18px;font-size:1rem;font-weight:700;cursor:pointer;text-decoration:none;text-align:center}
+  .primary{width:100%;margin-top:20px;background:var(--teal);color:#fff}
+  .primary:disabled{opacity:.6;cursor:wait}
+  .ghost{background:transparent;color:var(--teal);border:2px solid var(--teal)}
+  #msg{margin-top:16px;padding:12px 14px;border-radius:10px;display:none}
+  #msg.err{display:block;background:rgba(179,38,30,.1);color:var(--err);border:1px solid rgba(179,38,30,.3)}
+  #msg.info{display:block;background:rgba(58,170,148,.12);border:1px solid rgba(58,170,148,.35)}
+  #result{display:none;margin-top:18px}
+  #result .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  #result .row>*{flex:1 1 160px}
+  #preview{display:none;width:100%;height:70vh;border:1px solid var(--line);border-radius:10px;margin-top:14px;background:#fff}
+  @media (min-width:760px){#preview.on{display:block}}
+  footer{text-align:center;padding:18px 12px;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line)}
+  footer a{color:var(--teal);font-weight:600}
+</style>
+</head>
+<body>
+<header><img src="ccss-logo.png" alt="Chikondi Christian Secondary School"></header>
+
+<main>
+  <h1>Student Results</h1>
+  <p class="sub">Enter your child's student ID, then choose the academic year and term.</p>
+
+  <div class="card">
+    <label for="sid">Student ID</label>
+    <input id="sid" autocomplete="off" autocapitalize="characters" placeholder="e.g. CCSS-0012">
+    <div class="hint">Use the registration number on your child's school record.</div>
+
+    <div id="pinBox" style="display:none">
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN from the school">
+    </div>
+
+    <label for="year">Academic year</label>
+    <select id="year"><option value="">Loading…</option></select>
+
+    <label for="term">Term</label>
+    <select id="term" disabled><option value="">Choose a year first</option></select>
+
+    <button id="go" class="primary">View report</button>
+    <div id="msg" role="alert"></div>
+
+    <div id="result">
+      <strong id="rtitle"></strong>
+      <div class="row">
+        <a id="open" class="btn primary" style="margin:0" target="_blank" rel="noopener">Open report</a>
+        <a id="dl" class="btn ghost">Download PDF</a>
+      </div>
+      <iframe id="preview" title="Report preview"></iframe>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Chikondi Christian Secondary School is a program of
+  <a href="https://lovedriven.github.io/" target="_blank" rel="noopener">LoveDriven Ministries</a><br>
+  Walk with me &middot; Matthew 11:28-30
+</footer>
+
+<script>
+// 1) Paste your Apps Script web app address here (ends with /exec)
+const API = 'PASTE_YOUR_WEB_APP_EXEC_URL_HERE';
+
+const $ = id => document.getElementById(id);
+let blobUrl = null;
+
+function say(text, kind){ const m=$('msg'); m.textContent=text||''; m.className=text?kind:''; }
+async function call(params){
+  const r = await fetch(API + '?' + new URLSearchParams(params));
+  return r.json();
+}
+function fill(sel, items, placeholder){
+  sel.innerHTML = '';
+  const o = document.createElement('option'); o.value=''; o.textContent=placeholder; sel.appendChild(o);
+  items.forEach(v=>{ const x=document.createElement('option'); x.value=v; x.textContent=v; sel.appendChild(x); });
+}
+
+async function init(){
+  try{
+    const [cfg, yrs] = await Promise.all([call({action:'config'}), call({action:'years'})]);
+    if (cfg.requirePin) $('pinBox').style.display = 'block';
+    fill($('year'), yrs.years || [], 'Choose year');
+    if ((yrs.years||[]).length === 1) { $('year').value = yrs.years[0]; loadTerms(); }
+  }catch(e){ say('Cannot reach the results service. Check your internet and refresh.', 'err'); }
+}
+async function loadTerms(){
+  const y = $('year').value, t = $('term');
+  if(!y){ t.disabled = true; fill(t, [], 'Choose a year first'); return; }
+  t.disabled = true; fill(t, [], 'Loading…');
+  try{
+    const r = await call({action:'terms', year:y});
+    fill(t, r.terms || [], 'Choose term'); t.disabled = false;
+  }catch(e){ say('Could not load terms. Please try again.', 'err'); }
+}
+$('year').addEventListener('change', loadTerms);
+
+$('go').addEventListener('click', async ()=>{
+  say(''); $('result').style.display='none';
+  const id = $('sid').value.trim(), year=$('year').value, term=$('term').value;
+  if(!id) return say('Please enter the student ID.', 'err');
+  if(!year) return say('Please choose the academic year.', 'err');
+  if(!term) return say('Please choose the term.', 'err');
+  $('go').disabled = true; $('go').textContent = 'Looking for the report…';
+  try{
+    const r = await call({action:'result', id, year, term, pin: $('pin').value});
+    if(!r.ok) return say(r.error, 'err');
+    const bytes = Uint8Array.from(atob(r.data), c=>c.charCodeAt(0));
+    if(blobUrl) URL.revokeObjectURL(blobUrl);
+    blobUrl = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
+    $('rtitle').textContent = r.form + '  |  ' + r.term + '  |  ' + r.year;
+    $('open').href = blobUrl;
+    $('dl').href = blobUrl; $('dl').download = (id + '_' + r.term + '_' + r.year).replace(/[^\w.-]+/g,'_') + '.pdf';
+    $('preview').src = blobUrl; $('preview').className = 'on';
+    $('result').style.display = 'block';
+    $('result').scrollIntoView({behavior:'smooth'});
+  }catch(e){ say('Something went wrong. Please try again.', 'err'); }
+  finally{ $('go').disabled = false; $('go').textContent = 'View report'; }
+});
+$('sid').addEventListener('keydown', e=>{ if(e.key==='Enter') $('go').click(); });
+init();
+</script>
+</body>
+</html>
