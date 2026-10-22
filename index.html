@@ -84,7 +84,7 @@
         <select id="term" disabled><option value="">Choose a year first</option></select>
       </div>
 
-      <button id="go" class="primary" type="submit" disabled>View report</button>
+      <button id="go" class="primary" type="submit" disabled>View Report Card</button>
       <div id="msg" role="alert" aria-live="polite"></div>
     </form>
 
@@ -135,7 +135,7 @@ function fill(sel, items, placeholder){
   const o = document.createElement('option'); o.value = ''; o.textContent = placeholder; sel.appendChild(o);
   items.forEach(v => { const x = document.createElement('option'); x.value = v; x.textContent = v; sel.appendChild(x); });
 }
-function setGo(){ $('go').disabled = !student; $('go').textContent = 'View report'; }   // enabled only after the student is found
+function setGo(){ $('go').disabled = !student; $('go').textContent = 'View Report Card'; }   // enabled only after the student is found
 function busy(on, txt){ if(on){ $('go').disabled = true; $('go').textContent = txt; } else setGo(); }
 function initials(n){ return String(n).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase(); }
 function avatar(el, s){
