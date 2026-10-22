@@ -52,16 +52,12 @@
   @media (min-width:760px){#preview.on{display:block}}
   .deliver{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
   .deliver>strong{display:block;margin-bottom:10px}
-  .opts{display:flex;gap:10px;flex-wrap:wrap}
-  .opts>*{flex:1 1 150px}
-  .ghost.on{background:var(--teal);color:#fff}
   .dbox{margin-top:12px}
   .dbox label{margin:0 0 6px}
   .dbox .line{display:flex;gap:8px;flex-wrap:wrap}
   .dbox .line input{flex:1 1 200px;width:auto}
   .dbox .line .btn,.dbox .line button{flex:0 0 auto;margin:0;padding:13px 18px}
   .dbox .note{font-size:.82rem;color:var(--muted);margin-top:8px}
-  .dbox + .dbox{margin-top:14px}
   .dmsg{margin-top:12px;padding:12px 14px;border-radius:10px;font-size:.95rem}
   .dmsg.err{background:rgba(179,38,30,.1);color:var(--err);border:1px solid rgba(179,38,30,.3)}
   .dmsg.ok,.dmsg.info{background:rgba(58,170,148,.12);border:1px solid rgba(58,170,148,.35)}
@@ -116,29 +112,14 @@
       </div>
       <iframe id="preview" title="Report preview"></iframe>
       <div class="deliver">
-        <strong>Get a copy</strong>
-        <div class="opts">
-          <button type="button" class="btn ghost" id="optEmail">Email me a copy</button>
-          <button type="button" class="btn ghost" id="optWa">Send on WhatsApp</button>
-        </div>
-
-        <div class="dbox" id="emailBox" hidden>
+        <strong>Get a copy by email</strong>
+        <div class="dbox">
           <label for="email">Email address</label>
           <div class="line">
             <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
             <button type="button" class="btn primary" id="sendEmail">Send email</button>
           </div>
           <div class="note">The report card is sent as a PDF attachment. Please check the Spam folder if it does not arrive.</div>
-        </div>
-
-        <div class="dbox" id="waBox" hidden>
-          <button type="button" class="btn primary" id="waShare" style="margin:0 0 14px" hidden>Share the PDF on WhatsApp</button>
-          <label for="wanum">WhatsApp number (optional)</label>
-          <div class="line">
-            <input id="wanum" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0999 123 456">
-            <button type="button" class="btn ghost" id="waGo">Open WhatsApp</button>
-          </div>
-          <div class="note">WhatsApp does not let a website attach a file by itself. On a phone, use the share button above to send the PDF. Otherwise this opens WhatsApp with a message containing the link to this report card.</div>
         </div>
         <div id="dmsg" class="dmsg" hidden role="status" aria-live="polite"></div>
       </div>
@@ -273,7 +254,7 @@ async function getReport(){
     const pdf = new Blob([bytes], {type:'application/pdf'});
     blobUrl = URL.createObjectURL(pdf);
     last = { blob: pdf, file: fullId().replace(/\//g, '-') + '_' + r.term.replace(/\s+/g, '') + '.pdf', form: r.form, term: r.term, year: r.year };
-    pick('');
+    dsay('');
 
     avatar($('ravatar'), student); $('rname').textContent = student.name; $('rsid').textContent = fullId();
     $('rtitle').textContent = r.form + '  |  ' + r.term + '  |  ' + r.year;
@@ -298,23 +279,12 @@ $('form').addEventListener('submit', ev => {
 $('again').addEventListener('click', () => {
   $('result').style.display = 'none'; $('form').hidden = false; $('preview').removeAttribute('src');
   if(blobUrl){ URL.revokeObjectURL(blobUrl); blobUrl = null; }
-  student = null; last = null; pick(''); $('found').hidden = true; lock(true);
+  student = null; last = null; dsay(''); $('found').hidden = true; lock(true);
   sid.value = ''; setGo(); sid.focus();
 });
 
-/* ---------- get a copy: email / WhatsApp ---------- */
+/* ---------- get a copy by email ---------- */
 function dsay(text, kind){ const m = $('dmsg'); m.className = 'dmsg ' + (kind || ''); m.textContent = text || ''; m.hidden = !text; }
-function pdfFile(){ return new File([last.blob], last.file, {type:'application/pdf'}); }
-function canShareFile(){ try{ return !!(navigator.canShare && navigator.canShare({files:[pdfFile()]})); }catch(e){ return false; } }
-function pick(which){
-  $('emailBox').hidden = which !== 'email'; $('waBox').hidden = which !== 'wa';
-  $('optEmail').classList.toggle('on', which === 'email'); $('optWa').classList.toggle('on', which === 'wa');
-  if(which === 'wa') $('waShare').hidden = !(last && canShareFile());
-  dsay('');
-}
-$('optEmail').addEventListener('click', () => { pick('email'); $('email').focus(); });
-$('optWa').addEventListener('click', () => pick('wa'));
-
 $('sendEmail').addEventListener('click', async () => {
   const email = $('email').value.trim();
   if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(email)) return dsay('Please enter a valid email address.', 'err'), $('email').focus();
@@ -325,26 +295,6 @@ $('sendEmail').addEventListener('click', async () => {
   }catch(e){
     dsay(e.name === 'AbortError' ? 'The request took too long. Please try again.' : 'Could not send the email. Please try again.', 'err');
   }finally{ b.disabled = false; b.textContent = 'Send email'; }
-});
-
-const pageLink = () => location.origin + location.pathname + '?id=' + encodeURIComponent(fullId());
-const waText = () => 'Chikondi Christian Secondary School report card for ' + student.name + ' (' + fullId() + '), ' + last.term + ' ' + last.year + ': ' + pageLink();
-function waNumber(raw){                                   // Malawi: 0999... becomes 265999...
-  let d = String(raw).replace(/\D/g, '');
-  if(d.startsWith('00')) d = d.slice(2); else if(d.startsWith('0')) d = '265' + d.slice(1);
-  return d;
-}
-$('waGo').addEventListener('click', () => {
-  const raw = $('wanum').value.trim(), n = raw ? waNumber(raw) : '';
-  if(raw && (n.length < 9 || n.length > 15)) return dsay('Please enter a valid WhatsApp number, for example 0999 123 456.', 'err');
-  window.open('https://wa.me/' + n + '?text=' + encodeURIComponent(waText()), '_blank', 'noopener');
-});
-$('waShare').addEventListener('click', async () => {
-  try{
-    await navigator.share({ files:[pdfFile()], title:'Report card', text:'Report card for ' + student.name + ' (' + fullId() + '), ' + last.term + ' ' + last.year });
-  }catch(e){
-    if(e.name !== 'AbortError') dsay('Could not open the share menu. Use the WhatsApp number option instead.', 'err');
-  }
 });
 
 setGo();
