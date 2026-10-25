@@ -61,6 +61,15 @@
   .dmsg{margin-top:12px;padding:12px 14px;border-radius:10px;font-size:.95rem}
   .dmsg.err{background:rgba(179,38,30,.1);color:var(--err);border:1px solid rgba(179,38,30,.3)}
   .dmsg.ok,.dmsg.info{background:rgba(58,170,148,.12);border:1px solid rgba(58,170,148,.35)}
+  .updates{margin-top:16px}
+  .updates .ghost{width:100%}
+  .updates .note{font-size:.88rem;color:var(--muted);margin:10px 0 0}
+  .rot{display:grid;margin-top:2px}
+  .rot span{grid-area:1/1;opacity:0;animation:rot 15s infinite}
+  .rot span:nth-child(2){animation-delay:5s}
+  .rot span:nth-child(3){animation-delay:10s}
+  @keyframes rot{0%{opacity:0}4%,30%{opacity:1}34%,100%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){.rot{display:block}.rot span{opacity:1;animation:none;display:block}}
   footer{text-align:center;padding:18px 12px;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line)}
   footer a{color:var(--teal);font-weight:600}
 </style>
@@ -126,12 +135,31 @@
       <button type="button" class="linkbtn" id="again" style="margin-top:16px">&larr; Check another report</button>
     </div>
   </div>
+  <div class="card updates" id="subCard">
+    <button type="button" class="ghost" id="subToggle" aria-expanded="false" aria-controls="subForm">Get an email when a new report card is added</button>
+    <form id="subForm" hidden novalidate>
+      <p class="note">Ask to receive a student's new report cards by email. The school checks each request first, so please use the student's own number.</p>
+      <label for="subName">Your full name</label>
+      <input id="subName" autocomplete="name" placeholder="First and last name">
+      <label for="subEmail">Your email address</label>
+      <input id="subEmail" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
+      <label for="subSid">Student number</label>
+      <input id="subSid" autocomplete="off" autocapitalize="characters" placeholder="e.g. CCSS/000/25">
+      <button id="subBtn" class="primary" type="submit">Request updates</button>
+      <div id="subMsg" class="dmsg" hidden role="status" aria-live="polite"></div>
+      <p class="note">You will get an email when your request is sent, and another when it is approved.</p>
+    </form>
+  </div>
 </main>
 
 <footer>
   Chikondi Christian Secondary School is a program of
   <a href="https://lovedrivenministries.org/" target="_blank" rel="noopener">LoveDriven Ministries</a><br>
-  Walk with me &middot; Matthew 11:28-30
+  <div class="rot" aria-label="School mottos">
+    <span>Walk with me &middot; Matthew 11:28-30</span>
+    <span>&ldquo;To transform communities through holistic education&rdquo;</span>
+    <span>Learn &#9733; Lead &#9733; Succeed</span>
+  </div>
 </footer>
 
 <script>
@@ -230,6 +258,7 @@ async function findStudent(){
     student = { name: r.name, photo: r.photo || '' };
     avatar($('avatar'), student); $('fname').textContent = student.name; $('found').hidden = false;
     sid.value = asked; lock(false); say(''); setGo();
+    if(!$('subSid').value) $('subSid').value = asked;
   }catch(e){
     if(my !== seq) return;
     say(e.name === 'AbortError' ? 'The request took too long.' : 'Could not look up the student.', 'err', findStudent);
@@ -298,6 +327,32 @@ $('sendEmail').addEventListener('click', async () => {
 });
 
 setGo();
+/* ---------- ask for report card updates by email (needs the school's approval) ---------- */
+function ssay(text, kind){ const m = $('subMsg'); m.className = 'dmsg ' + (kind || ''); m.textContent = text || ''; m.hidden = !text; }
+$('subToggle').addEventListener('click', () => {
+  const f = $('subForm'); f.hidden = !f.hidden;
+  $('subToggle').setAttribute('aria-expanded', String(!f.hidden));
+  if(!f.hidden){ if(student && !$('subSid').value) $('subSid').value = fullId(); ssay(''); $('subName').focus(); }
+});
+$('subForm').addEventListener('submit', async ev => {
+  ev.preventDefault(); ssay('');
+  const name = $('subName').value.replace(/\s+/g, ' ').trim(), email = $('subEmail').value.trim();
+  const d = $('subSid').value.replace(/\D/g, '');
+  if(name.length < 3 || name.indexOf(' ') < 0) return ssay('Please enter your full name (first and last name).', 'err'), $('subName').focus();
+  if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(email)) return ssay('Please enter a valid email address.', 'err'), $('subEmail').focus();
+  if(d.length !== 5) return ssay('Enter the student number like CCSS/000/25.', 'err'), $('subSid').focus();
+  const id = 'CCSS/' + d.slice(0, 3) + '/' + d.slice(3, 5);
+  const b = $('subBtn'); b.disabled = true; b.textContent = 'Sending…'; ssay('Sending your request…', 'info');
+  try{
+    const r = await call({ action:'subscribe', name, email, id });
+    if(!r.ok) return ssay(r.error, 'err');
+    ssay('Request sent. ' + (r.emailed === false ? '' : 'We have emailed you a confirmation (please check the Spam folder too). ') + 'You will get another email once the school approves it.', 'ok');
+    $('subName').value = ''; $('subEmail').value = '';
+  }catch(e){
+    ssay(e.name === 'AbortError' ? 'The request took too long. Please try again.' : 'Could not send your request. Please try again.', 'err');
+  }finally{ b.disabled = false; b.textContent = 'Request updates'; }
+});
+
 init();
 // a link like .../results/?id=CCSS/012/25 fills in the ID and finds the student straight away
 const qid = new URLSearchParams(location.search).get('id');
