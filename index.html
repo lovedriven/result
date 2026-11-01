@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15303F">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>CCSS Student Results</title>
 <link rel="icon" href="data:image/png;base64,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">
 <style>
@@ -464,6 +468,7 @@ $('subForm').addEventListener('submit', async ev => {
   }finally{ b.disabled = false; b.textContent = 'Request updates'; }
 });
 
+if('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 init();
 // a link like .../results/?id=CCSS/012/25 fills in the ID and finds the student straight away
 const qid = new URLSearchParams(location.search).get('id');
