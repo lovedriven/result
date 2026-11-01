@@ -40,6 +40,9 @@
   .found .name{font-size:1.15rem;font-weight:700;line-height:1.25;margin:2px 0 4px}
   .linkbtn{padding:0;background:none;color:var(--muted);font-size:.85rem;font-weight:600;text-decoration:underline}
   #rest.lock{opacity:.45;pointer-events:none}
+  .found.pop{animation:pop .3s cubic-bezier(.2,.9,.3,1.25)}
+  @keyframes pop{0%{opacity:0;transform:scale(.88) translateY(-8px)}100%{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.found.pop{animation:none}}
 
   #result{display:none;margin-top:18px}
   #result .who{display:flex;align-items:center;gap:14px;margin-bottom:6px}
@@ -89,10 +92,10 @@
   @media (min-width:700px){                                          /* tablet */
     main{max-width:780px;padding-top:30px;padding-bottom:44px}
     .card{padding:26px}
-    #rest{display:grid;grid-template-columns:1fr 1fr;column-gap:16px}
+    #rest{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));column-gap:16px}
     #result .row{flex-wrap:nowrap}
     .updates #subForm{display:grid;grid-template-columns:1fr 1fr;column-gap:16px}
-    .updates #subForm>p,.updates #subForm>button,.updates #subForm>.dmsg,.updates #subForm label[for=subSid],.updates #subForm #subSid{grid-column:1/-1}
+    .updates #subForm>p,.updates #subForm>button,.updates #subForm>.dmsg,.updates #subForm>.found,.updates #subForm label[for=subSid],.updates #subForm #subSid{grid-column:1/-1}
   }
   @media (min-width:1050px){                                         /* laptop / PC: two columns */
     header img{max-width:520px}
@@ -115,7 +118,7 @@
 
 <main>
   <h1>Student Results</h1>
-  <p class="sub">Enter your child's student ID, then choose the academic year and term.</p>
+  <p class="sub">Enter your child's student ID, then choose the academic year, term and Mid Term or End Term.</p>
 
   <div class="card">
     <form id="form" novalidate>
@@ -138,6 +141,9 @@
 
         <div><label for="term">Term</label>
         <select id="term" disabled><option value="">Choose a year first</option></select></div>
+
+        <div id="examBox" hidden><label for="exam">Mid Term or End Term</label>
+        <select id="exam" disabled><option value="">Choose a term first</option></select></div>
       </div>
 
       <button id="go" class="primary" type="submit" disabled>View Report Card</button>
@@ -179,8 +185,19 @@
       <input id="subName" autocomplete="name" placeholder="First and last name">
       <label for="subEmail">Your email address</label>
       <input id="subEmail" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
+      <label for="subPhone">Your phone number</label>
+      <input id="subPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0999 000 000">
       <label for="subSid">Student number</label>
       <input id="subSid" autocomplete="off" autocapitalize="characters" placeholder="e.g. CCSS/000/25">
+      <div id="subLook" class="dmsg" hidden role="status" aria-live="polite"></div>
+      <div class="found" id="subStudent" hidden>
+        <div class="avatar" id="subAvatar"></div>
+        <div>
+          <small>Student found</small>
+          <div class="name" id="subSName"></div>
+          <button type="button" class="linkbtn" id="subNot">Not your child? Change number</button>
+        </div>
+      </div>
       <button id="subBtn" class="primary" type="submit">Request updates</button>
       <div id="subMsg" class="dmsg" hidden role="status" aria-live="polite"></div>
       <p class="note">You will get an email when your request is sent, and another when it is approved.</p>
@@ -203,6 +220,7 @@ const API = 'https://script.google.com/macros/s/AKfycbxOnPVjw4hefUA0wFtYg25rkWjx
 
 const $ = id => document.getElementById(id);
 let blobUrl = null, student = null, last = null;
+const stuCache = {};   // full student ID -> { name, photo }, so the same child is only looked up once
 
 /* ---------- helpers ---------- */
 async function call(params, ms = 45000){
@@ -244,7 +262,7 @@ const intakeYear = () => idValid() ? 2000 + Number(digits().slice(3, 5)) : null;
 function lock(on){
   $('rest').classList.toggle('lock', on);
   $('year').disabled = on;
-  if(on) $('term').disabled = true; else if($('year').value) loadTerms();
+  if(on){ $('term').disabled = true; $('exam').disabled = true; } else if($('year').value) loadTerms();
 }
 function resetStudent(){
   if(!student) return;
@@ -272,8 +290,24 @@ async function init(){
     say('Cannot reach the results service. Check your internet connection.', 'err', init);
   }
 }
+let examSeq = 0;
+function resetExam(){ examSeq++; $('examBox').hidden = true; fill($('exam'), [], 'Choose a term first'); $('exam').disabled = true; }
+async function loadExams(){
+  const y = $('year').value, t = $('term').value, s = $('exam'), my = ++examSeq;
+  $('examBox').hidden = true; fill(s, [], 'Loading…'); s.disabled = true;
+  if(!y || !t) return;
+  try{
+    const r = await call({action:'exams', year:y, term:t});
+    if(my !== examSeq) return;
+    const list = r.exams || [];
+    if(!list.length) return;                          // old folder layout: no Mid/End Term to choose
+    fill(s, list, 'Choose Mid Term or End Term'); s.disabled = false; $('examBox').hidden = false;
+    if(list.length === 1) s.value = list[0];
+  }catch(e){ if(my !== examSeq) return; say('Could not load Mid Term / End Term.', 'err', loadExams); }
+}
 async function loadTerms(){
   const y = $('year').value, t = $('term');
+  resetExam();
   if(!y){ t.disabled = true; fill(t, [], 'Choose a year first'); return; }
   t.disabled = true; fill(t, [], 'Loading…');
   try{
@@ -282,6 +316,7 @@ async function loadTerms(){
   }catch(e){ fill(t, [], 'Unavailable'); say('Could not load the terms.', 'err', loadTerms); }
 }
 $('year').addEventListener('change', () => { say(''); loadTerms(); });
+$('term').addEventListener('change', () => { say(''); loadExams(); });
 
 /* ---------- step 1: find the student (runs automatically when the ID is complete) ---------- */
 async function findStudent(){
@@ -293,8 +328,9 @@ async function findStudent(){
     if(!r.ok) return say(r.error, 'err');
     student = { name: r.name, photo: r.photo || '' };
     avatar($('avatar'), student); $('fname').textContent = student.name; $('found').hidden = false;
+    stuCache[asked] = student;
     sid.value = asked; lock(false); say(''); setGo();
-    if(!$('subSid').value) $('subSid').value = asked;
+    if(!$('subSid').value){ $('subSid').value = asked; $('subSid').dispatchEvent(new Event('input')); }
   }catch(e){
     if(my !== seq) return;
     say(e.name === 'AbortError' ? 'The request took too long.' : 'Could not look up the student.', 'err', findStudent);
@@ -304,29 +340,31 @@ async function findStudent(){
 /* ---------- step 2: get the report ---------- */
 async function getReport(){
   const year = $('year').value, term = $('term').value, joined = intakeYear();
+  const exam = $('examBox').hidden ? '' : $('exam').value;
   if(!year) return say('Please choose the academic year.', 'err');
   if(!term) return say('Please choose the term.', 'err');
+  if(!$('examBox').hidden && !exam) return say('Please choose Mid Term or End Term.', 'err');
   const start = parseInt(year, 10);
   if(joined && start && start < joined)
     return say('This student joined in ' + joined + ', so there are no reports for ' + year + '. Please choose a later year.', 'err');
 
   busy(true, 'Looking for the report…'); say('This can take a few seconds…', 'info');
   try{
-    const r = await call({ action:'result', id: fullId(), year, term });
+    const r = await call({ action:'result', id: fullId(), year, term, exam });
     if(!r.ok) return say(r.error, 'err');
     const bytes = Uint8Array.from(atob(r.data), c => c.charCodeAt(0));
     if(blobUrl) URL.revokeObjectURL(blobUrl);
     const pdf = new Blob([bytes], {type:'application/pdf'});
     blobUrl = URL.createObjectURL(pdf);
-    last = { blob: pdf, file: fullId().replace(/\//g, '-') + '_' + r.term.replace(/\s+/g, '') + '.pdf', form: r.form, term: r.term, year: r.year };
+    last = { blob: pdf, file: fullId().replace(/\//g, '-') + '_' + r.term.replace(/\s+/g, '') + '.pdf', form: r.form, term: r.term, exam: r.exam || '', year: r.year };
     dsay('');
 
     avatar($('ravatar'), student); $('rname').textContent = student.name; $('rsid').textContent = fullId();
-    $('rtitle').textContent = r.form + '  |  ' + r.term + '  |  ' + r.year;
+    $('rtitle').textContent = [r.form, r.term, r.exam, r.year].filter(Boolean).join('  |  ');
     $('rintake').textContent = joined ? 'Year of intake: ' + joined : '';
     $('open').href = blobUrl;
     $('dl').href = blobUrl;
-    $('dl').download = (fullId() + '_' + r.term + '_' + r.year).replace(/[^\w.-]+/g, '_') + '.pdf';
+    $('dl').download = (fullId() + '_' + r.term + (r.exam ? '_' + r.exam : '') + '_' + r.year).replace(/[^\w.-]+/g, '_') + '.pdf';
     $('preview').src = blobUrl; $('preview').className = 'on';
     say(''); $('form').hidden = true; $('result').style.display = 'block'; document.querySelector('main').classList.add('has-result');
     $('result').scrollIntoView({behavior:'smooth'});
@@ -344,7 +382,7 @@ $('form').addEventListener('submit', ev => {
 $('again').addEventListener('click', () => {
   $('result').style.display = 'none'; $('form').hidden = false; document.querySelector('main').classList.remove('has-result'); $('preview').removeAttribute('src');
   if(blobUrl){ URL.revokeObjectURL(blobUrl); blobUrl = null; }
-  student = null; last = null; dsay(''); $('found').hidden = true; lock(true);
+  student = null; last = null; dsay(''); $('found').hidden = true; lock(true); resetExam();
   sid.value = ''; setGo(); sid.focus();
 });
 
@@ -355,7 +393,7 @@ $('sendEmail').addEventListener('click', async () => {
   if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(email)) return dsay('Please enter a valid email address.', 'err'), $('email').focus();
   const b = $('sendEmail'); b.disabled = true; b.textContent = 'Sending…'; dsay('Sending the report card…', 'info');
   try{
-    const r = await call({ action:'email', id: fullId(), year: last.year, term: last.term, email });
+    const r = await call({ action:'email', id: fullId(), year: last.year, term: last.term, exam: last.exam, email });
     dsay(r.ok ? 'Sent to ' + email + '. Please check your inbox (and the Spam folder).' : r.error, r.ok ? 'ok' : 'err');
   }catch(e){
     dsay(e.name === 'AbortError' ? 'The request took too long. Please try again.' : 'Could not send the email. Please try again.', 'err');
@@ -368,22 +406,59 @@ function ssay(text, kind){ const m = $('subMsg'); m.className = 'dmsg ' + (kind 
 $('subToggle').addEventListener('click', () => {
   const f = $('subForm'); f.hidden = !f.hidden;
   $('subToggle').setAttribute('aria-expanded', String(!f.hidden));
-  if(!f.hidden){ if(student && !$('subSid').value) $('subSid').value = fullId(); ssay(''); $('subName').focus(); }
+  if(!f.hidden){ if(student && !$('subSid').value){ $('subSid').value = fullId(); $('subSid').dispatchEvent(new Event('input')); } ssay(''); $('subName').focus(); }
 });
+
+/* student number in the updates form: the child's name and photo pop up as soon as the number is complete */
+const subSid = $('subSid');
+let subStudent = null, subSeq = 0, subTimer = null;
+const subDigits = () => subSid.value.replace(/\D/g, '');
+const subFull = () => { const d = subDigits(); return 'CCSS/' + d.slice(0, 3) + '/' + d.slice(3, 5); };
+function subLook(text, kind){ const m = $('subLook'); m.className = 'dmsg ' + (kind || ''); m.textContent = text || ''; m.hidden = !text; }
+function subHide(){ $('subStudent').hidden = true; $('subStudent').classList.remove('pop'); subLook(''); }
+function subShow(s){
+  subStudent = s; subLook('');
+  avatar($('subAvatar'), s); $('subSName').textContent = s.name;
+  const box = $('subStudent'); box.hidden = false; box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');   // replays the pop animation
+}
+async function subFind(){
+  const id = subFull(), my = ++subSeq;
+  if(stuCache[id]) return subShow(stuCache[id]);
+  subHide(); subLook('Looking for student…', 'info');
+  try{
+    const r = await call({ action:'student', id });
+    if(my !== subSeq) return;                          // the number was changed while waiting
+    if(!r.ok){ subStudent = null; return subLook(r.error, 'err'); }
+    stuCache[id] = { name: r.name, photo: r.photo || '' };
+    subShow(stuCache[id]);
+  }catch(e){
+    if(my !== subSeq) return;
+    subStudent = null; subLook(e.name === 'AbortError' ? 'The request took too long. Please try again.' : 'Could not look up the student.', 'err');
+  }
+}
+subSid.addEventListener('input', () => {
+  subSeq++; clearTimeout(subTimer); subStudent = null; subHide();
+  if(subDigits().length === 5) subTimer = setTimeout(subFind, 250);
+});
+subSid.addEventListener('blur', () => { if(subDigits().length === 5) subSid.value = subFull(); });
+$('subNot').addEventListener('click', () => { subSeq++; subStudent = null; subHide(); subSid.value = ''; subSid.focus(); });
 $('subForm').addEventListener('submit', async ev => {
   ev.preventDefault(); ssay('');
   const name = $('subName').value.replace(/\s+/g, ' ').trim(), email = $('subEmail').value.trim();
   const d = $('subSid').value.replace(/\D/g, '');
+  const phone = $('subPhone').value.trim().replace(/[\s\-().]/g, '');
   if(name.length < 3 || name.indexOf(' ') < 0) return ssay('Please enter your full name (first and last name).', 'err'), $('subName').focus();
   if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(email)) return ssay('Please enter a valid email address.', 'err'), $('subEmail').focus();
+  if(!/^\+?\d{9,15}$/.test(phone)) return ssay('Please enter a valid phone number, for example 0999 000 000 or +265 999 000 000.', 'err'), $('subPhone').focus();
   if(d.length !== 5) return ssay('Enter the student number like CCSS/000/25.', 'err'), $('subSid').focus();
   const id = 'CCSS/' + d.slice(0, 3) + '/' + d.slice(3, 5);
   const b = $('subBtn'); b.disabled = true; b.textContent = 'Sending…'; ssay('Sending your request…', 'info');
   try{
-    const r = await call({ action:'subscribe', name, email, id });
+    if(!subStudent){ await subFind(); if(!subStudent) return ssay('We could not find that student. Please check the student number.', 'err'), $('subSid').focus(); }
+    const r = await call({ action:'subscribe', name, email, phone, id });
     if(!r.ok) return ssay(r.error, 'err');
-    ssay('Request sent. ' + (r.emailed === false ? '' : 'We have emailed you a confirmation (please check the Spam folder too). ') + 'You will get another email once the school approves it.', 'ok');
-    $('subName').value = ''; $('subEmail').value = '';
+    ssay('Request sent for ' + subStudent.name + '. ' + (r.emailed === false ? '' : 'We have emailed you a confirmation (please check the Spam folder too). ') + 'You will get another email once the school approves it.', 'ok');
+    $('subName').value = ''; $('subEmail').value = ''; $('subPhone').value = '';
   }catch(e){
     ssay(e.name === 'AbortError' ? 'The request took too long. Please try again.' : 'Could not send your request. Please try again.', 'err');
   }finally{ b.disabled = false; b.textContent = 'Request updates'; }
