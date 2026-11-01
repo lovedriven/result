@@ -77,6 +77,15 @@
   .rot span:nth-child(3){animation-delay:10s}
   @keyframes rot{0%{opacity:0}4%,30%{opacity:1}34%,100%{opacity:0}}
   @media (prefers-reduced-motion:reduce){.rot{display:block}.rot span{opacity:1;animation:none;display:block}}
+  .appget{margin-top:16px}
+  .appget h2{margin:0 0 4px;font-size:1.05rem}
+  .appget p{margin:0 0 12px;color:var(--muted);font-size:.92rem}
+  .appget .dlapk{display:block;width:100%;padding:14px;border-radius:12px;background:var(--navy);color:#fff;text-align:center;font-weight:700;text-decoration:none;font-size:1rem}
+  .appget .dlapk:focus-visible{outline:3px solid rgba(58,170,148,.5);outline-offset:2px}
+  .appget details{margin-top:12px;font-size:.9rem}
+  .appget summary{cursor:pointer;font-weight:700;color:var(--teal)}
+  .appget ol{margin:8px 0 0;padding-left:20px;color:var(--text)} .appget li{margin:5px 0}
+  .appget .alt{margin:10px 0 0;font-size:.85rem}.appget .alt a{color:var(--teal);font-weight:600}
   footer{text-align:center;padding:18px 12px;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line)}
   footer a{color:var(--teal);font-weight:600}
 
@@ -106,6 +115,7 @@
     main{max-width:1140px;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);column-gap:28px;align-items:start}
     main>h1,main>.sub{grid-column:1/-1}
     main>.updates{margin-top:0;position:sticky;top:16px}
+    main>.appget{grid-column:1/-1;max-width:760px}
     .updates #subForm{display:block}
     main.has-result>.card:not(.updates){grid-column:1/-1}           /* the report gets the full width */
     main.has-result>.updates{grid-column:1/-1;position:static;margin-top:16px;max-width:760px}
@@ -114,7 +124,7 @@
   @media (min-width:1600px){                                         /* large monitors / TVs */
     html{font-size:18px} main{max-width:1320px}
   }
-  @media print{ header,footer,.updates,.deliver,#again,#msg{display:none!important} body{background:#fff} .card{box-shadow:none;border:0} }
+  @media print{ header,footer,.updates,.appget,.deliver,#again,#msg{display:none!important} body{background:#fff} .card{box-shadow:none;border:0} }
 </style>
 </head>
 <body>
@@ -206,6 +216,23 @@
       <div id="subMsg" class="dmsg" hidden role="status" aria-live="polite"></div>
       <p class="note">You will get an email when your request is sent, and another when it is approved.</p>
     </form>
+  </div>
+
+  <div class="card appget" id="appGet" hidden>
+    <h2>Get the CCSS Results app for Android</h2>
+    <p>Open your child's report card faster, straight from your phone's home screen. It shows the same results page as this website.</p>
+    <a class="dlapk" id="apkLink" href="https://drive.google.com/uc?export=download&id=1dZ4r02oouR0DKqox1kSRhg8dns2xhgcX" rel="noopener">Download the Android app (APK)</a>
+    <details>
+      <summary>How to install it</summary>
+      <ol>
+        <li>Tap <b>Download the Android app</b> and wait for the file to finish downloading.</li>
+        <li>Open the downloaded file (check your notifications or the <b>Downloads</b> folder).</li>
+        <li>If Android asks, allow your browser to <b>install unknown apps</b>, then go back and tap the file again.</li>
+        <li>If you see a Play Protect warning, choose <b>Install anyway</b>. The app is not on the Play Store, so this is normal.</li>
+        <li>Tap <b>Open</b>. You can also find <b>CCSS Results</b> on your home screen or app list.</li>
+      </ol>
+    </details>
+    <p class="alt">Download not starting? <a href="https://drive.google.com/file/d/1dZ4r02oouR0DKqox1kSRhg8dns2xhgcX/view?usp=drive_link" target="_blank" rel="noopener">Open it in Google Drive</a> and tap Download. Only download this app from the school's results page.</p>
   </div>
 </main>
 
@@ -470,6 +497,14 @@ $('subForm').addEventListener('submit', async ev => {
 
 if('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 init();
+/* "Get the app" box: Android phones and PCs see it; hidden inside the installed app and on iPhone/iPad */
+(function(){
+  const ua = navigator.userAgent || '';
+  const inApp = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone ||
+                /^android-app:/.test(document.referrer) || /[?&]source=app\b/.test(location.search);
+  const ios = /iPhone|iPad|iPod/i.test(ua);
+  if(!inApp && !ios) $('appGet').hidden = false;
+})();
 // a link like .../results/?id=CCSS/012/25 fills in the ID and finds the student straight away
 const qid = new URLSearchParams(location.search).get('id');
 if(qid){ sid.value = qid; sid.dispatchEvent(new Event('input')); }
